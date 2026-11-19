@@ -1,0 +1,597 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Gallery Car Camera Planner</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: control rail on the left, 3D car on the right, camera view + per-person readout under it. */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#17212b; --muted:#5b6875; --line:#d3dae1;
+  --scene:#dfe5ea; --p1:#0b6bcb; --p2:#b8480f; --ok:#16794a; --warn:#a15c00; --bad:#b3261e;
+  --chip:#e8edf2;
+  --f-display:"Space Grotesk","Inter",system-ui,sans-serif;
+  --f-body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151b; --panel:#18202a; --ink:#e6edf3; --muted:#93a1af; --line:#2a3541;
+    --scene:#0c1116; --p1:#5aa9ff; --p2:#ff9a5c; --ok:#4cc38a; --warn:#f0b24a; --bad:#ff7b72;
+    --chip:#222c38; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10151b; --panel:#18202a; --ink:#e6edf3; --muted:#93a1af; --line:#2a3541;
+  --scene:#0c1116; --p1:#5aa9ff; --p2:#ff9a5c; --ok:#4cc38a; --warn:#f0b24a; --bad:#ff7b72;
+  --chip:#222c38; color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:12px;box-sizing:border-box}
+*{box-sizing:border-box}
+.app{display:grid;grid-template-columns:320px minmax(0,1fr);gap:12px;height:100%}
+.rail{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.main{display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0}
+h1{font-family:var(--f-display);font-size:19px;font-weight:600;margin:0;text-wrap:balance}
+.sub{color:var(--muted);font-size:12px;margin:4px 0 0}
+h2{font-family:var(--f-display);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+section{min-width:0}
+.plans{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.plans label{border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer;display:block}
+.plans input{position:absolute;opacity:0}
+.plans b{display:block;font-family:var(--f-display);font-size:14px}
+.plans span{color:var(--muted);font-size:12px}
+.plans label:has(input:checked){border-color:var(--p1);box-shadow:inset 0 0 0 1px var(--p1)}
+.plans label:has(input:focus-visible),.cam:has(input:focus-visible){outline:2px solid var(--p1);outline-offset:2px}
+.cams{display:flex;flex-direction:column;gap:4px}
+.cam{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:8px;align-items:center;padding:5px 6px;border-radius:6px}
+.cam.sel{background:var(--chip)}
+.cam .dot{width:10px;height:10px;border-radius:50%}
+.cam .nm{min-width:0}
+.cam .nm small{display:block;color:var(--muted);font-size:11.5px}
+.cam button{grid-column:3;justify-self:start}
+button{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:4px 9px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--p1);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+.checks label{display:flex;gap:6px;align-items:center;font-size:13px;min-width:0}
+.grp{font-size:11.5px;color:var(--muted);grid-column:1/-1;margin-top:6px}
+.grp:first-child{margin-top:0}
+.sl{display:grid;grid-template-columns:86px minmax(0,1fr) 56px;gap:8px;align-items:center;margin-bottom:5px;font-size:13px}
+.sl output{font-family:var(--f-mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;min-width:0}
+select,input[type=number]{font:inherit;font-size:13px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;max-width:100%}
+input[type=number]{width:64px;font-family:var(--f-mono)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.note{color:var(--muted);font-size:12px;margin:6px 0 0}
+.view{position:relative;flex:1 1 auto;min-height:280px;background:var(--scene);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.view canvas{display:block;width:100%;height:100%}
+.presets{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap;right:10px}
+.ends{position:absolute;left:10px;bottom:8px;font-family:var(--f-mono);font-size:11.5px;color:var(--muted)}
+.strip{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:12px;flex:0 0 auto}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0}
+.pipwrap{position:relative;aspect-ratio:16/9;max-width:100%;background:#000;border-radius:6px;overflow:hidden}
+.pipwrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.cap{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:6px}
+.cap b{font-family:var(--f-display);font-size:14px}
+.cap span{color:var(--muted);font-size:12px;font-family:var(--f-mono)}
+.tblwrap{overflow:auto;max-height:226px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{text-align:left;color:var(--muted);font-weight:500;font-size:11.5px;position:sticky;top:0;background:var(--panel);padding:3px 8px 3px 0;white-space:nowrap}
+td{padding:3px 8px 3px 0;border-top:1px solid var(--line);white-space:nowrap}
+td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.pill{display:inline-block;border-radius:99px;padding:0 8px;font-size:11.5px;font-weight:600;border:1px solid currentColor}
+.pill.ok{color:var(--ok)} .pill.small{color:var(--warn)} .pill.blocked{color:var(--bad)}
+.sum{font-size:13px;margin:0 0 6px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px}
+@media (max-width:860px){
+  html,body{height:auto}
+  .app{grid-template-columns:minmax(0,1fr);height:auto}
+  .main{order:-1}
+  .view{flex:none;height:340px}
+  .strip{grid-template-columns:minmax(0,1fr)}
+  .rail{overflow:visible}
+}
+</style>
+
+<div class="app">
+  <aside class="rail">
+    <header>
+      <h1>Gallery Car Camera Planner</h1>
+      <p class="sub">Trailer car 6000 series, from drawing A01-002 rev F. Lengths follow the drawing; heights and widths are partly estimated (about &plusmn;10 cm).</p>
+    </header>
+
+    <section>
+      <h2>Plan</h2>
+      <div class="plans">
+        <label><input type="radio" name="plan" id="plan1" value="1" checked><b>Plan 1</b><span>Entrance camera only</span></label>
+        <label><input type="radio" name="plan" id="plan2" value="2"><b>Plan 2</b><span>Entrance + ReID camera</span></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>Cameras</h2>
+      <div class="cams" id="camList"></div>
+      <p class="note">Tick a camera to show it. Press View to look through it and adjust it.</p>
+    </section>
+
+    <section>
+      <h2>Adjust selected camera</h2>
+      <div class="sl"><label for="sYaw">Pan</label><input type="range" id="sYaw" min="-180" max="180" step="1"><output id="oYaw"></output></div>
+      <div class="sl"><label for="sTilt">Tilt down</label><input type="range" id="sTilt" min="0" max="85" step="1"><output id="oTilt"></output></div>
+      <div class="sl"><label for="sY">Height</label><input type="range" id="sY" min="1.4" max="3.45" step="0.01"><output id="oY"></output></div>
+      <div class="sl"><label for="sX">Along car</label><input type="range" id="sX" min="-12.5" max="12.5" step="0.05"><output id="oX"></output></div>
+      <div class="sl"><label for="sZ">Across car</label><input type="range" id="sZ" min="-1.36" max="1.36" step="0.02"><output id="oZ"></output></div>
+      <div class="sl"><label for="sFov">Lens angle</label><input type="range" id="sFov" min="55" max="115" step="1"><output id="oFov"></output></div>
+      <div class="row"><button id="btnReset" type="button">Reset this camera</button></div>
+      <p class="note" id="camNote"></p>
+    </section>
+
+    <section>
+      <h2>Tap reader position</h2>
+      <select id="readerSel" aria-label="Tap reader position">
+        <option value="leftDoor">Beside left exterior door</option>
+        <option value="rightDoor">Beside right exterior door</option>
+        <option value="aDoor">At doorway to A-end seats</option>
+        <option value="bDoor">At doorway to B-end seats</option>
+        <option value="centre">Post in vestibule centre</option>
+      </select>
+      <p class="note">The person tapping and the next in the queue move with it.</p>
+    </section>
+
+    <section>
+      <h2>Layers</h2>
+      <div class="checks" id="layerChecks"></div>
+    </section>
+
+    <section>
+      <h2>Size limits</h2>
+      <div class="row">
+        <label for="minW">Min width</label><input type="number" id="minW" value="120" min="0" max="400" step="5">
+        <label for="minH">Min height</label><input type="number" id="minH" value="150" min="0" max="600" step="5"><span class="note" style="margin:0">px</span>
+      </div>
+      <p class="note">Defaults are this FEDS unit's current settings, measured on its 1280&times;720 working frame. A person smaller than either limit is ignored. Lens angle 83&deg; is the listed figure for the CP Plus CP-UNC-TA41L3C-D-LQ (3.6 mm).</p>
+    </section>
+  </aside>
+
+  <main class="main">
+    <div class="view" id="view">
+      <canvas id="c3d"></canvas>
+      <div class="presets" id="presets">
+        <button type="button" data-v="whole">Whole car</button>
+        <button type="button" data-v="vest">Vestibule</button>
+        <button type="button" data-v="aend">A-end</button>
+        <button type="button" data-v="bend">B-end</button>
+        <button type="button" data-v="top">Top</button>
+        <button type="button" data-v="side">Side</button>
+      </div>
+      <div class="ends">B-end &larr; 25.1 m body, 2.8 m inside width &rarr; A-end &nbsp;|&nbsp; drag to rotate, scroll to zoom, right-drag to pan</div>
+    </div>
+    <div class="strip">
+      <div class="card">
+        <div class="cap"><b id="pipName">Camera view</b><span id="pipSpec"></span></div>
+        <div class="pipwrap"><canvas id="cpip"></canvas><canvas id="cover"></canvas></div>
+        <div class="legend"><span><i style="background:var(--ok)"></i>usable</span><span><i style="background:var(--warn)"></i>too small</span><span><i style="background:var(--bad)"></i>blocked</span></div>
+      </div>
+      <div class="card">
+        <p class="sum" id="sum"></p>
+        <div class="tblwrap"><table><thead><tr><th>Person</th><th>Where</th><th>Distance</th><th>Size (px)</th><th>Seen</th><th>Result</th></tr></thead><tbody id="tbody"></tbody></table></div>
+        <div class="legend"><span><i style="background:#d6342b"></i>width limit range</span><span><i style="background:#e0a100"></i>height limit range</span></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+"use strict";
+var DEG=Math.PI/180, $=function(id){return document.getElementById(id)};
+if(!window.THREE){ $("view").insertAdjacentHTML("beforeend","<p style='position:absolute;inset:60px 16px auto;'>The 3D library could not load. Check the internet connection and reload.</p>"); return; }
+
+/* ---------- car dimensions (metres). x along car (B-end negative, A-end positive), y up, z across ---------- */
+var D={L:25.146,W:2.80,roofY:3.5,vestH:2.15,deckY:2.03,deckT:0.06,gW:0.88,pitch:0.851,stairL:1.30,doorHalf:0.95};
+D.xB0=-D.L/2; D.xA1=D.L/2; D.xv0=D.xB0+10.40; D.xv1=D.xv0+2.62; D.xvc=(D.xv0+D.xv1)/2;
+
+var scene=new THREE.Scene();
+var G={}, OCC={};
+["floor","shell","roof","bulk","decks","stairs","equip","seatsL","seatsG","pStand","pSeat","reader","camBodies","cones","ranges","labels"].forEach(function(k){
+  G[k]=new THREE.Group(); G[k].name=k; scene.add(G[k]); OCC[k]=[];
+});
+function mat(c,o){var m=new THREE.MeshLambertMaterial({color:c}); if(o!==undefined&&o<1){m.transparent=true;m.opacity=o;} return m;}
+var M={floor:mat(0x8d98a3),vfloor:mat(0xa9b4bd),wall:mat(0xb9c2ca),win:mat(0x8fc3e6,0.55),roof:mat(0xc8d0d6),bulk:mat(0x9aa5b0,0.92),
+  deck:mat(0xa3adb7),rail:mat(0x5f6b77),stair:mat(0x7c8792),seat:mat(0x3d5a80),seatG:mat(0x466a8f),equip:mat(0x8a8f96),door:mat(0x56616c)};
+function box(w,h,d,m,x,y,z,key,occ){
+  var b=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m); b.position.set(x,y,z); G[key].add(b);
+  if(occ!==false) OCC[key].push(b); return b;
+}
+function plane(w,h,m,x,y,z,ry,rx,key,occ){
+  var p=new THREE.Mesh(new THREE.PlaneGeometry(w,h),m); p.position.set(x,y,z); if(ry)p.rotation.y=ry; if(rx)p.rotation.x=rx; G[key].add(p);
+  if(occ) OCC[key].push(p); return p;
+}
+
+/* floor */
+box(D.L,0.05,D.W,M.floor,0,-0.025,0,"floor",true);
+box(D.xv1-D.xv0,0.012,D.W,M.vfloor,D.xvc,0.006,0,"floor",false);
+
+/* shell: wall planes face inward, so the wall nearest the viewer is culled and the inside stays visible */
+(function(){
+  var H=D.roofY, z=D.W/2;
+  var segs=[[D.xB0,D.xvc-D.doorHalf],[D.xvc+D.doorHalf,D.xA1]];
+  [-1,1].forEach(function(s){
+    var ry=s<0?0:Math.PI;
+    segs.forEach(function(g){ plane(g[1]-g[0],H,M.wall,(g[0]+g[1])/2,H/2,s*z,ry,0,"shell",true); });
+    plane(2*D.doorHalf,H-2.0,M.wall,D.xvc,2.0+(H-2.0)/2,s*z,ry,0,"shell",true);          // above exterior door
+    // door frame posts
+    box(0.05,2.0,0.05,M.door,D.xvc-D.doorHalf,1.0,s*(z-0.02),"shell",false);
+    box(0.05,2.0,0.05,M.door,D.xvc+D.doorHalf,1.0,s*(z-0.02),"shell",false);
+    box(2*D.doorHalf,0.05,0.05,M.door,D.xvc,2.0,s*(z-0.02),"shell",false);
+    // windows, lower and gallery bands
+    var zi=s*(z-0.012);
+    [[D.xB0+0.6,D.xv0-1.5],[D.xv1+1.5,D.xA1-0.6]].forEach(function(r){
+      for(var x=r[0]+0.75;x<r[1]-0.6;x+=1.70){
+        plane(1.35,0.68,M.win,x,1.30,zi,ry,0,"shell",false);
+        plane(1.35,0.50,M.win,x,2.98,zi,ry,0,"shell",false);
+      }
+    });
+  });
+  plane(D.W,H,M.wall,D.xA1,H/2,0,-Math.PI/2,0,"shell",true);
+  plane(D.W,H,M.wall,D.xB0,H/2,0, Math.PI/2,0,"shell",true);
+  box(0.03,2.0,0.8,M.door,D.xA1-0.02,1.0,0,"shell",false);
+  box(0.03,2.0,0.8,M.door,D.xB0+0.02,1.0,0,"shell",false);
+  plane(D.L,D.W,M.roof,0,H,0,0,Math.PI/2,"roof",true);
+})();
+
+/* vestibule bulkheads with centre doorway, and the equipment space over the vestibule */
+[D.xv0,D.xv1].forEach(function(x){
+  var half=0.45, side=(D.W/2-half);
+  box(0.06,D.roofY,side,M.bulk,x,D.roofY/2,-(half+side/2),"bulk");
+  box(0.06,D.roofY,side,M.bulk,x,D.roofY/2, (half+side/2),"bulk");
+  box(0.06,D.roofY-2.0,2*half,M.bulk,x,2.0+(D.roofY-2.0)/2,0,"bulk");
+});
+box(D.xv1-D.xv0-0.06,D.roofY-D.vestH,D.W,M.equip,D.xvc,D.vestH+(D.roofY-D.vestH)/2,0,"bulk");
+
+/* gallery decks + rails; stairs */
+var gal={A:[D.xv1+D.stairL,D.xA1],B:[D.xB0,D.xv0-D.stairL]};
+Object.keys(gal).forEach(function(e){
+  var a=gal[e][0],b=gal[e][1],len=b-a,cx=(a+b)/2;
+  [-1,1].forEach(function(s){
+    box(len,D.deckT,D.gW,M.deck,cx,D.deckY-D.deckT/2,s*(D.W/2-D.gW/2),"decks");
+    var zr=s*(D.W/2-D.gW);
+    box(len,0.04,0.04,M.rail,cx,D.deckY+0.9,zr,"decks",false);
+    box(len,0.03,0.03,M.rail,cx,D.deckY+0.45,zr,"decks",false);
+    for(var x=a;x<=b+0.01;x+=1.2) box(0.03,0.9,0.03,M.rail,Math.min(x,b),D.deckY+0.45,zr,"decks",false);
+  });
+});
+var STEPS=8, rise=D.deckY/STEPS, run=D.stairL/STEPS;
+[[D.xv1+0.04,1],[D.xv0-0.04,-1]].forEach(function(st){
+  [-1,1].forEach(function(s){
+    for(var i=0;i<STEPS;i++) box(run,rise*(i+1),0.6,M.stair,st[0]+st[1]*(i+0.5)*run,rise*(i+1)/2,s*1.05,"stairs");
+  });
+});
+
+/* seats */
+var rowsA=[],rowsB=[];
+for(var i=0;i<12;i++) rowsA.push(D.xv1+D.stairL+(i+0.5)*D.pitch);
+for(var j=0;j<8;j++) rowsB.push(D.xB0+0.55+(j+0.5)*D.pitch);
+function lowerSeat(x,z,backDir){
+  box(0.40,0.37,0.90,M.seat,x,0.185,z,"seatsL");
+  box(0.45,0.10,0.96,M.seat,x,0.42,z,"seatsL");
+  box(0.07,0.62,0.96,M.seat,x+backDir*0.21,0.76,z,"seatsL");
+}
+rowsA.forEach(function(x){lowerSeat(x,-0.89,1);lowerSeat(x,0.89,1);});
+rowsB.forEach(function(x){lowerSeat(x,-0.89,-1);lowerSeat(x,0.89,-1);});
+function galSeatXs(a,b,n){var o=[];for(var k=0;k<n;k++)o.push(a+(b-a)*(k+0.5)/n);return o;}
+var gxA=galSeatXs(D.xv1+D.stairL+0.3,D.xA1-0.35,16), gxB=galSeatXs(D.xB0+0.35,D.xv0-D.stairL-0.3,14);
+function galSeat(x,s,backDir){
+  var z=s*(D.W/2-0.25);
+  box(0.42,0.08,0.42,M.seatG,x,D.deckY+0.42,z,"seatsG");
+  box(0.34,0.38,0.34,M.seatG,x,D.deckY+0.19,z,"seatsG");
+  box(0.06,0.50,0.42,M.seatG,x+backDir*0.2,D.deckY+0.71,z,"seatsG");
+}
+gxA.forEach(function(x){galSeat(x,-1,1);galSeat(x,1,1);});
+gxB.forEach(function(x){galSeat(x,-1,-1);galSeat(x,1,-1);});
+
+/* toilet room and wheelchair space, B-end next to the stairs */
+var tzx=(D.xv0-D.stairL+rowsB[7]+D.pitch/2)/2;
+box(1.5,1.95,1.0,M.equip,tzx,0.975,0.9,"equip");
+box(1.5,0.012,1.0,mat(0x4f8fc0),tzx,0.007,-0.9,"equip",false);
+
+/* ---------- labels ---------- */
+function sprite(text,bg,scale){
+  var c=document.createElement("canvas"),x=c.getContext("2d");
+  x.font="600 44px Inter, system-ui, sans-serif"; var w=Math.ceil(x.measureText(text).width)+36; c.width=w; c.height=64;
+  x.font="600 44px Inter, system-ui, sans-serif"; x.fillStyle=bg;
+  x.beginPath(); var r=16; x.moveTo(r,0); x.arcTo(w,0,w,64,r); x.arcTo(w,64,0,64,r); x.arcTo(0,64,0,0,r); x.arcTo(0,0,w,0,r); x.fill();
+  x.fillStyle="#fff"; x.textBaseline="middle"; x.fillText(text,18,34);
+  var t=new THREE.CanvasTexture(c); var s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false,transparent:true}));
+  var k=(scale||0.32); s.scale.set(k*w/64,k,1); s.renderOrder=10; s.layers.set(1); return s;
+}
+function addLabel(text,x,y,z,bg,scale){var s=sprite(text,bg||"#3b4754",scale); s.position.set(x,y,z); G.labels.add(s); return s;}
+addLabel("Vestibule",D.xvc,2.45,0,"#3b4754",0.38);
+addLabel("A-end lower, 48 seats",D.xv1+6.5,0.05,1.9,"#3b4754",0.36);
+addLabel("B-end lower, 36 seats",D.xv0-5.5,0.05,1.9,"#3b4754",0.36);
+addLabel("A-end gallery, 32 seats",D.xv1+6.5,3.75,0,"#3b4754",0.36);
+addLabel("B-end gallery, 29 seats",D.xv0-5.5,3.75,0,"#3b4754",0.36);
+addLabel("Toilet",tzx,2.15,0.9,"#3b4754",0.3);
+
+/* ---------- people ---------- */
+var people=[], PCOL=[0xd1495b,0x2a9d8f,0xe9c46a,0x6d597a,0xf4a261,0x457b9d,0x8ab17d,0xb56576,0x4d908e,0xbc6c25];
+function person(id,pose,x,y0,z,where){
+  var g=new THREE.Group(), col=PCOL[people.length%PCOL.length], m=mat(col), skin=mat(0xe0b89a), meshes=[];
+  function add(geo,mm,px,py,pz){var b=new THREE.Mesh(geo,mm); b.position.set(px,py,pz); g.add(b); meshes.push(b); return b;}
+  var p={id:id,pose:pose,where:where,group:g,meshes:meshes};
+  if(pose==="stand"){
+    add(new THREE.CylinderGeometry(0.19,0.16,1.45,12),m,0,0.725,0);
+    add(new THREE.SphereGeometry(0.115,12,10),skin,0,1.585,0);
+    p.h=1.70; p.w=0.50; p.y0=0; p.fr=[0.04,0.30,0.55,0.78,0.96];
+  }else{
+    add(new THREE.BoxGeometry(0.30,0.60,0.42),m,0,0.78,0);
+    add(new THREE.BoxGeometry(0.42,0.14,0.40),m,-0.2,0.50,0);
+    add(new THREE.SphereGeometry(0.115,12,10),skin,0,1.20,0);
+    p.h=0.88; p.w=0.50; p.y0=0.44; p.fr=[0.10,0.35,0.55,0.75,0.95];
+  }
+  g.position.set(x,y0,z);
+  var key=pose==="stand"?"pStand":"pSeat"; G[key].add(g); p.key=key;
+  p.tag=sprite(id,"#1f2933",0.2); p.tag.position.set(0,(pose==="stand"?1.95:1.5),0); g.add(p.tag);
+  people.push(p); return p;
+}
+var P1=person("P1","stand",0,0,0,"Vestibule, tapping");
+var P2=person("P2","stand",0,0,0,"Vestibule, queue");
+person("P3","stand",D.xvc-0.35,0,-0.95,"Vestibule, boarding");
+person("P4","stand",D.xv1-0.45,0,0.08,"Vestibule, to A-end");
+person("P5","stand",D.xv1+1.5,0,0,"A-end aisle, just in");
+person("P6","stand",D.xv1+5.0,0,0.05,"A-end aisle, middle");
+person("P7","stand",D.xv1+9.0,0,-0.05,"A-end aisle, far");
+person("P8","stand",D.xv1+0.04+4.5*run,5*rise,-1.05,"A-end stairs");
+person("P9","stand",D.xv1+3.6,D.deckY,0.72,"A-end gallery walkway");
+person("P10","stand",D.xv0-1.7,0,0,"B-end aisle, just in");
+person("P11","stand",D.xv0-6.0,0,0,"B-end aisle, middle");
+[[0,-1.13],[1,0.65],[3,-0.65],[5,1.13],[8,-1.13],[10,0.65]].forEach(function(s,k){person("S"+(k+1),"seat",rowsA[s[0]]-0.02,0,s[1],"A-end lower, row "+(s[0]+1));});
+[[6,0.65],[3,-1.13],[1,1.13]].forEach(function(s,k){person("S"+(k+7),"seat",rowsB[s[0]]+0.02,0,s[1],"B-end lower, row "+(8-s[0]));});
+[[2,-1],[7,1],[12,-1]].forEach(function(s,k){person("S"+(k+10),"seat",gxA[s[0]]-0.02,D.deckY,s[1]*(D.W/2-0.25),"A-end gallery");});
+[[3,1],[9,-1]].forEach(function(s,k){person("S"+(k+13),"seat",gxB[s[0]]+0.02,D.deckY,s[1]*(D.W/2-0.25),"B-end gallery");});
+
+/* ---------- tap reader ---------- */
+var readerObj=new THREE.Group();
+(function(){
+  var y=new THREE.MeshLambertMaterial({color:0xf2c400,emissive:0x5a4700});
+  var post=new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,1.05,10),mat(0x4a5560)); post.position.y=0.525; readerObj.add(post);
+  var head=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.22,0.09),y); head.position.y=1.15; readerObj.add(head);
+  var t=sprite("Tap reader","#8a6a00",0.22); t.position.y=1.5; readerObj.add(t);
+  G.reader.add(readerObj);
+})();
+var READER={
+  leftDoor:{x:D.xvc+1.12,z:-1.28,ox:0,oz:0.45},
+  rightDoor:{x:D.xvc+1.12,z:1.28,ox:0,oz:-0.45},
+  aDoor:{x:D.xv1-0.1,z:0.72,ox:-0.45,oz:0},
+  bDoor:{x:D.xv0+0.1,z:-0.72,ox:0.45,oz:0},
+  centre:{x:D.xvc,z:0,ox:0,oz:-0.45}
+};
+function placeReader(k){
+  var r=READER[k]; readerObj.position.set(r.x,0,r.z);
+  P1.group.position.set(r.x+r.ox,0,r.z+r.oz);
+  P2.group.position.set(r.x+r.ox*2.5,0,r.z+r.oz*2.5);
+  dirty=true;
+}
+
+/* ---------- cameras ---------- */
+var C1=0x0b6bcb, C2=0xd9601a;
+function camDef(id,plan,name,area,pos,tgt,level,note,on){
+  var dx=tgt[0]-pos[0],dy=tgt[1]-pos[1],dz=tgt[2]-pos[2],h=Math.hypot(dx,dz);
+  return {id:id,plan:plan,name:name,area:area,x:pos[0],y:pos[1],z:pos[2],yaw:Math.round(Math.atan2(dz,dx)/DEG),tilt:Math.round(Math.atan2(-dy,h)/DEG),
+    hfov:83,level:level,note:note,on:!!on};
+}
+var cams=[
+  camDef("E1",1,"Entrance, corner","Vestibule ceiling corner",[D.xv1-0.15,2.05,1.20],[D.xv0+0.5,0.9,-0.9],0,"Corner mount sees most of the vestibule floor and the left doors. Under a 2.15 m ceiling a bullet camera sits at head height; a low-profile mount matters here.",true),
+  camDef("E2",1,"Entrance, over door","Above right doors",[D.xvc,2.05,1.28],[D.xvc,0.8,-1.2],0,"Looks straight across at the opposite doors. People boarding from the left face the camera; people boarding from the right are directly underneath and not seen.",false),
+  camDef("E3",1,"Entrance, bulkhead","A-end bulkhead centre",[D.xv1-0.15,2.05,0],[D.xv0+0.2,0.9,0],0,"Looks along the vestibule towards the B-end doorway. Both exterior doors are seen side-on.",false),
+  camDef("R1",2,"ReID, A-end doorway","Under gallery edge, 3.3 m in",[D.xv1+3.3,1.93,0.48],[D.xv1+0.3,1.0,0],0,"Watches everyone entering the A-end as they walk upright towards the camera, including the foot of both stairs. This is the view closest to how people looked at the reader.",true),
+  camDef("R2",2,"ReID, A-end aisle","Above A-end end door",[D.xA1-0.15,2.3,0],[D.xA1-6,1.0,0],0,"Looks down the full aisle. Covers the most seats, but people near the vestibule are far away and seated people are hidden by seat backs.",false),
+  camDef("R3",2,"ReID, B-end doorway","Under gallery edge, 3.3 m in",[D.xv0-3.3,1.93,-0.48],[D.xv0-0.3,1.0,0],0,"Same idea as the A-end doorway camera, for passengers turning towards the B-end.",false),
+  camDef("R4",2,"ReID, B-end aisle","Above B-end end door",[D.xB0+0.15,2.3,0],[D.xB0+6,1.0,0],0,"Looks down the B-end aisle towards the vestibule.",false),
+  camDef("R5",2,"ReID, A-end gallery","End wall, high centre",[D.xA1-0.15,3.3,0],[D.xA1-6,2.6,0],D.deckY,"Looks along the open well and sees both upper galleries. Passengers are seated side-on and partly behind the rail.",false),
+  camDef("R6",2,"ReID, B-end gallery","End wall, high centre",[D.xB0+0.15,3.3,0],[D.xB0+6,2.6,0],D.deckY,"Looks along the B-end well and sees both upper galleries.",false)
+];
+cams.forEach(function(c){c.def={x:c.x,y:c.y,z:c.z,yaw:c.yaw,tilt:c.tilt,hfov:c.hfov};});
+var plan=1, selId="E1", dirty=true;
+function vfovOf(h){return 2*Math.atan(Math.tan(h*DEG/2)*9/16)/DEG;}
+function focalPx(h){return 640/Math.tan(h*DEG/2);}
+function camDir(c){var t=c.tilt*DEG,y=c.yaw*DEG;return new THREE.Vector3(Math.cos(t)*Math.cos(y),-Math.sin(t),Math.cos(t)*Math.sin(y));}
+function shown(c){return c.on&&(plan===2||c.plan===1);}
+function setL1(o){o.traverse(function(n){n.layers.set(1);});}
+
+function buildCam(c){
+  ["body","cone","range"].forEach(function(k){ if(c[k]){c[k].parent.remove(c[k]); c[k].traverse(function(n){if(n.geometry)n.geometry.dispose();});} });
+  var col=c.plan===1?C1:C2, dir=camDir(c);
+  var q=new THREE.Quaternion().setFromEuler(new THREE.Euler(0,-c.yaw*DEG,-c.tilt*DEG,"YXZ"));
+  // body
+  var body=new THREE.Group();
+  var cyl=new THREE.Mesh(new THREE.CylinderGeometry(0.038,0.038,0.19,14),new THREE.MeshLambertMaterial({color:0xf3f4f6})); cyl.rotation.z=Math.PI/2; cyl.position.x=-0.10; body.add(cyl);
+  var lens=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.02,14),new THREE.MeshLambertMaterial({color:col})); lens.rotation.z=Math.PI/2; lens.position.x=-0.005; body.add(lens);
+  body.position.set(c.x,c.y,c.z); body.quaternion.copy(q);
+  var tag=sprite(c.id,c.plan===1?"#0b6bcb":"#b8480f",0.26); tag.position.set(0,0.22,0); body.add(tag);
+  setL1(body); G.camBodies.add(body); c.body=body;
+  // view cone
+  var R=5, th=Math.tan(c.hfov*DEG/2)*R, tv=Math.tan(vfovOf(c.hfov)*DEG/2)*R;
+  var pts=[0,0,0, R,tv,-th, R,tv,th, R,-tv,th, R,-tv,-th];
+  var cone=new THREE.Group(), geo=new THREE.BufferGeometry();
+  geo.setAttribute("position",new THREE.Float32BufferAttribute(pts,3)); geo.setIndex([0,1,2,0,2,3,0,3,4,0,4,1]);
+  cone.add(new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:c.id===selId?0.16:0.07,side:THREE.DoubleSide,depthWrite:false})));
+  var lg=new THREE.BufferGeometry(); lg.setAttribute("position",new THREE.Float32BufferAttribute(pts,3)); lg.setIndex([0,1,0,2,0,3,0,4,1,2,2,3,3,4,4,1]);
+  cone.add(new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:col,transparent:true,opacity:c.id===selId?0.95:0.45})));
+  cone.position.copy(body.position); cone.quaternion.copy(q); setL1(cone); G.cones.add(cone); c.cone=cone;
+  // range arcs on the floor of that level: where a standing adult drops under each size limit
+  var rg=new THREE.Group(), f=focalPx(c.hfov), minW=+$("minW").value||0, minH=+$("minH").value||0, dh=c.y-(c.level+0.9);
+  function arc(d,color){
+    if(!isFinite(d)||d<=Math.abs(dh)) return; var r=Math.sqrt(d*d-dh*dh), a0=(c.yaw-c.hfov/2)*DEG, a1=(c.yaw+c.hfov/2)*DEG, p=[];
+    for(var k=0;k<=32;k++){var a=a0+(a1-a0)*k/32; p.push(c.x+r*Math.cos(a),c.level+0.03,c.z+r*Math.sin(a));}
+    var g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.Float32BufferAttribute(p,3));
+    rg.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:color})));
+  }
+  if(minW>0) arc(f*0.50/minW,0xd6342b);
+  if(minH>0) arc(f*1.70/minH,0xe0a100);
+  setL1(rg); G.ranges.add(rg); c.range=rg;
+  var v=shown(c); body.visible=v; cone.visible=v; rg.visible=v&&c.id===selId;
+  dirty=true;
+}
+function rebuildAll(){cams.forEach(buildCam);}
+
+/* ---------- renderers ---------- */
+var c3d=$("c3d"), view=$("view");
+var renderer=new THREE.WebGLRenderer({canvas:c3d,antialias:true}); renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+var cam3=new THREE.PerspectiveCamera(42,2,0.1,200); cam3.layers.enable(1);
+var ctl=new THREE.OrbitControls(cam3,c3d); ctl.enableDamping=true; ctl.dampingFactor=0.12; ctl.maxDistance=70; ctl.minDistance=0.6;
+scene.add(new THREE.HemisphereLight(0xffffff,0x6b7480,0.85));
+var sun=new THREE.DirectionalLight(0xffffff,0.55); sun.position.set(6,14,9); scene.add(sun);
+var cpip=$("cpip"), cover=$("cover");
+var rpip=new THREE.WebGLRenderer({canvas:cpip,antialias:true}); rpip.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+var camV=new THREE.PerspectiveCamera(50,16/9,0.06,80);
+var VIEWS={whole:[[-3,15,21],[0,1.3,0]],vest:[[D.xvc+0.6,6.5,6.5],[D.xvc,1,0]],aend:[[D.xv1+9,6.5,8],[D.xv1+5,1.3,0]],bend:[[D.xv0-9,6.5,8],[D.xv0-5,1.3,0]],top:[[0,31,0.01],[0,0,0]],side:[[0,2.2,24],[0,1.7,0]]};
+function goView(k){var v=VIEWS[k]; cam3.position.set(v[0][0],v[0][1],v[0][2]); ctl.target.set(v[1][0],v[1][1],v[1][2]); ctl.update();}
+$("presets").addEventListener("click",function(e){var b=e.target.closest("button"); if(b) goView(b.dataset.v);});
+function fit(){
+  var w=view.clientWidth,h=view.clientHeight; if(w&&h){renderer.setSize(w,h,false); cam3.aspect=w/h; cam3.updateProjectionMatrix();}
+  var pw=cpip.parentNode.clientWidth,ph=cpip.parentNode.clientHeight; if(pw&&ph){rpip.setSize(pw,ph,false); var d=Math.min(window.devicePixelRatio||1,2); cover.width=pw*d; cover.height=ph*d;}
+  dirty=true;
+}
+if(window.ResizeObserver){new ResizeObserver(fit).observe(view); new ResizeObserver(fit).observe(cpip.parentNode);} else window.addEventListener("resize",fit);
+function theme(){var s=getComputedStyle(document.documentElement).getPropertyValue("--scene").trim()||"#dfe5ea"; scene.background=new THREE.Color(s);}
+theme();
+if(window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",theme);
+new MutationObserver(theme).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+
+/* ---------- per-person measurement for the selected camera ---------- */
+var ray=new THREE.Raycaster(), results=[];
+function occluders(selfP){
+  var list=[]; Object.keys(OCC).forEach(function(k){ if(G[k].visible) Array.prototype.push.apply(list,OCC[k]); });
+  people.forEach(function(p){ if(p!==selfP&&G[p.key].visible) Array.prototype.push.apply(list,p.meshes); });
+  return list;
+}
+function measure(){
+  var c=cams.filter(function(k){return k.id===selId;})[0]; results=[]; if(!c||!shown(c)) return c;
+  var pos=new THREE.Vector3(c.x,c.y,c.z), dir=camDir(c);
+  camV.fov=vfovOf(c.hfov); camV.position.copy(pos); camV.up.set(0,1,0); camV.lookAt(pos.clone().add(dir)); camV.updateProjectionMatrix(); camV.updateMatrixWorld(true);
+  camV.matrixWorldInverse.copy(camV.matrixWorld).invert();
+  var minW=+$("minW").value||0, minH=+$("minH").value||0;
+  people.forEach(function(p){
+    if(!G[p.key].visible) return;
+    var gp=p.group.position, yb=gp.y+p.y0, hw=p.w/2, hd=0.18, x0=1e9,x1=-1e9,y0=1e9,y1=-1e9, front=0;
+    for(var a=0;a<8;a++){
+      var v=new THREE.Vector3(gp.x+((a&1)?hd:-hd), yb+((a&2)?p.h:0), gp.z+((a&4)?hw:-hw));
+      if(v.clone().applyMatrix4(camV.matrixWorldInverse).z>-0.08) continue; front++;
+      v.project(camV); var px=(v.x+1)*640, py=(1-v.y)*360;
+      x0=Math.min(x0,px); x1=Math.max(x1,px); y0=Math.min(y0,py); y1=Math.max(y1,py);
+    }
+    if(front<8) return;
+    var mid=new THREE.Vector3(gp.x,yb+p.h*0.6,gp.z), mp=mid.clone().project(camV);
+    if(Math.abs(mp.x)>1||Math.abs(mp.y)>1) return;
+    var cx0=Math.max(0,x0),cx1=Math.min(1280,x1),cy0=Math.max(0,y0),cy1=Math.min(720,y1);
+    if(cx1<=cx0||cy1<=cy0) return;
+    var occ=occluders(p), clear=0;
+    p.fr.forEach(function(fr){
+      var t=new THREE.Vector3(gp.x,yb+p.h*fr,gp.z), d=t.clone().sub(pos), len=d.length();
+      ray.set(pos,d.normalize()); ray.far=len-0.12; ray.near=0.05;
+      if(ray.intersectObjects(occ,false).length===0) clear++;
+    });
+    var seen=clear/p.fr.length, w=cx1-cx0, h=cy1-cy0, st=seen<0.6?"blocked":((w<minW||h<minH)?"small":"ok");
+    results.push({p:p,dist:mid.distanceTo(pos),w:w,h:h,seen:seen,st:st,box:[cx0,cy0,cx1,cy1]});
+  });
+  results.sort(function(a,b){return a.dist-b.dist;});
+  return c;
+}
+var LBL={ok:"usable",small:"too small",blocked:"blocked"};
+function paintReadout(c){
+  var tb=$("tbody"); tb.textContent="";
+  if(!c||!shown(c)){ $("sum").textContent="No camera is selected in this plan."; $("pipName").textContent="Camera view"; $("pipSpec").textContent=""; return; }
+  $("pipName").textContent=c.id+"  "+c.name;
+  $("pipSpec").textContent=c.hfov+"° × "+vfovOf(c.hfov).toFixed(0)+"°, 1280×720";
+  var ok=results.filter(function(r){return r.st==="ok";}).length;
+  $("sum").textContent=results.length? (ok+" of "+results.length+" people in this camera's frame are usable. "+(people.filter(function(p){return G[p.key].visible;}).length-results.length)+" others are outside its frame.") : "Nobody is in this camera's frame.";
+  results.forEach(function(r){
+    var tr=document.createElement("tr");
+    [[r.p.id,""],[r.p.where,""],[r.dist.toFixed(1)+" m","n"],[Math.round(r.w)+" × "+Math.round(r.h),"n"],[Math.round(r.seen*100)+"%","n"]].forEach(function(cell){
+      var td=document.createElement("td"); td.textContent=cell[0]; if(cell[1])td.className=cell[1]; tr.appendChild(td);
+    });
+    var td=document.createElement("td"), s=document.createElement("span"); s.className="pill "+r.st; s.textContent=LBL[r.st]; td.appendChild(s); tr.appendChild(td);
+    tb.appendChild(tr);
+  });
+}
+function paintOverlay(c){
+  var x=cover.getContext("2d"); x.clearRect(0,0,cover.width,cover.height); if(!c||!shown(c)) return;
+  var k=cover.width/1280;
+  var COL={ok:"#35d07f",small:"#ffc247",blocked:"#ff6b61"};
+  x.lineWidth=Math.max(1.5,2*k*2); x.font="600 "+Math.round(13*k*2.2)+"px Inter, system-ui, sans-serif"; x.textBaseline="bottom";
+  results.forEach(function(r){
+    var b=r.box; x.strokeStyle=COL[r.st]; x.strokeRect(b[0]*k,b[1]*k,(b[2]-b[0])*k,(b[3]-b[1])*k);
+    x.fillStyle=COL[r.st]; x.fillText(r.p.id,b[0]*k+2,Math.max(14*k*2.2,b[1]*k-2));
+  });
+}
+
+/* ---------- UI ---------- */
+var LAYERS=[["Car"],["shell","Walls and windows",1],["roof","Roof",1],["bulk","Vestibule walls",1],["floor","Floor",1],["decks","Gallery decks and rails",1],["stairs","Stairs",1],["seatsL","Lower seats",1],["seatsG","Gallery seats",1],["equip","Toilet and wheelchair space",1],
+  ["People"],["pStand","Standing and walking",1],["pSeat","Seated",1],
+  ["Plan overlays"],["camBodies","Camera bodies",1],["cones","View cones",1],["ranges","Size-limit ranges",1],["reader","Tap reader",1],["labels","Area labels",1]];
+(function(){
+  var host=$("layerChecks");
+  LAYERS.forEach(function(l){
+    if(l.length===1){var d=document.createElement("div"); d.className="grp"; d.textContent=l[0]; host.appendChild(d); return;}
+    var lab=document.createElement("label"), cb=document.createElement("input"); cb.type="checkbox"; cb.id="ly_"+l[0]; cb.checked=!!l[2];
+    cb.addEventListener("change",function(){G[l[0]].visible=cb.checked; dirty=true;});
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(l[1])); host.appendChild(lab);
+  });
+  var row=document.createElement("div"); row.className="row"; row.style.gridColumn="1/-1"; row.style.marginTop="8px";
+  [["Show all",true],["Hide all",false]].forEach(function(b){
+    var bt=document.createElement("button"); bt.type="button"; bt.textContent=b[0];
+    bt.addEventListener("click",function(){LAYERS.forEach(function(l){if(l.length>1){G[l[0]].visible=b[1]; $("ly_"+l[0]).checked=b[1];}}); dirty=true;});
+    row.appendChild(bt);
+  });
+  host.appendChild(row);
+})();
+function sel(){return cams.filter(function(c){return c.id===selId;})[0];}
+function renderCamList(){
+  var host=$("camList"); host.textContent="";
+  cams.forEach(function(c){
+    if(plan===1&&c.plan===2) return;
+    var d=document.createElement("div"); d.className="cam"+(c.id===selId?" sel":"");
+    var cb=document.createElement("input"); cb.type="checkbox"; cb.id="cam_"+c.id; cb.checked=c.on; cb.setAttribute("aria-label","Show "+c.id);
+    cb.addEventListener("change",function(){c.on=cb.checked; if(!c.on&&selId===c.id){var n=cams.filter(shown)[0]; selId=n?n.id:selId;} rebuildAll(); renderCamList(); syncSliders();});
+    var dot=document.createElement("span"); dot.className="dot"; dot.style.background=c.plan===1?"var(--p1)":"var(--p2)";
+    var nm=document.createElement("div"); nm.className="nm"; nm.textContent=c.id+"  "+c.name; var sm=document.createElement("small"); sm.textContent=c.area; nm.appendChild(sm);
+    var bt=document.createElement("button"); bt.type="button"; bt.textContent="View"; bt.setAttribute("aria-pressed",c.id===selId?"true":"false");
+    bt.addEventListener("click",function(){c.on=true; selId=c.id; rebuildAll(); renderCamList(); syncSliders();});
+    d.appendChild(cb); d.appendChild(dot); d.appendChild(nm); d.appendChild(bt); host.appendChild(d);
+  });
+}
+var SL=[["sYaw","oYaw","yaw",function(v){return v+"°";}],["sTilt","oTilt","tilt",function(v){return v+"°";}],["sY","oY","y",function(v){return (+v).toFixed(2)+" m";}],
+  ["sX","oX","x",function(v){return (+v).toFixed(2)+" m";}],["sZ","oZ","z",function(v){return (+v).toFixed(2)+" m";}],["sFov","oFov","hfov",function(v){return v+"°";}]];
+function syncSliders(){
+  var c=sel(), on=!!c&&shown(c);
+  SL.forEach(function(s){var el=$(s[0]); el.disabled=!on; if(c){el.value=c[s[2]]; $(s[1]).textContent=s[3](c[s[2]]);}});
+  $("btnReset").disabled=!on; $("camNote").textContent=on?c.note:"";
+}
+SL.forEach(function(s){$(s[0]).addEventListener("input",function(e){var c=sel(); if(!c)return; c[s[2]]=+e.target.value; $(s[1]).textContent=s[3](c[s[2]]); buildCam(c);});});
+$("btnReset").addEventListener("click",function(){var c=sel(); if(!c)return; Object.keys(c.def).forEach(function(k){c[k]=c.def[k];}); buildCam(c); syncSliders();});
+["plan1","plan2"].forEach(function(id){$(id).addEventListener("change",function(e){
+  if(!e.target.checked) return; plan=+e.target.value;
+  var c=sel(); if(!c||!shown(c)){var n=cams.filter(shown)[0]; if(n) selId=n.id;}
+  if(plan===2){var r=cams.filter(function(k){return k.plan===2&&k.on;})[0]; if(r) selId=r.id;}
+  rebuildAll(); renderCamList(); syncSliders();
+});});
+$("readerSel").addEventListener("change",function(e){placeReader(e.target.value);});
+["minW","minH"].forEach(function(id){$(id).addEventListener("input",function(){rebuildAll();});});
+
+/* ---------- start ---------- */
+placeReader("leftDoor"); rebuildAll(); renderCamList(); syncSliders(); fit(); goView("whole");
+function frame(){
+  ctl.update(); renderer.render(scene,cam3);
+  if(dirty){ dirty=false; var c=measure(); paintReadout(c); paintOverlay(c); if(c&&shown(c)) rpip.render(scene,camV); else rpip.clear(); }
+  requestAnimationFrame(frame);
+}
+frame();
+})();
+</script>
